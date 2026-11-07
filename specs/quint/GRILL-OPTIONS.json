@@ -1,0 +1,31 @@
+{
+  "questions": [
+    {
+      "questionIndex": 1,
+      "affects": [
+        "ENV-6",
+        "OUT-5"
+      ],
+      "options": [
+        {
+          "id": "a",
+          "recommended": true,
+          "label": "預設部署：使用者快取啟用，驗證可能讀到過期快照（建議，與 CVE 的預設組態一致）",
+          "rules": "- **ENV-6（assumption；預設採用，G1 可推翻）** 本次驗證的組態為 Keycloak 預設：使用者快取啟用（`model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/InfinispanUserCacheProviderFactory.java:91-92`）。因此模型允許「請求持有的 snapshot 落後於持久化 counter」。證據：`model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/DefaultLazyLoader.java:64-79`、`model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/entities/CachedUser.java:80,156-159`。\n- **OUT-5（confirmed）** 不驗證停用使用者快取的組態，以及 JPA `@Version` 在衝突時的交易中止行為；此組態不在本次模型範圍（`model/jpa/src/main/java/org/keycloak/models/jpa/entities/CredentialEntity.java:77-79`、`model/jpa/src/main/resources/META-INF/jpa-changelog-26.2.0.xml:33-34`）。"
+        },
+        {
+          "id": "b",
+          "recommended": false,
+          "label": "兩種組態都建模：以 cacheEnabled 參數涵蓋快取啟用與停用，並把無快取的樂觀鎖衝突建模為交易中止",
+          "rules": "- **ENV-6（assumption；預設採用，G1 可推翻）** 以參數 `cacheEnabled ∈ {true,false}` 建模兩種組態：`true` 時驗證讀取可能取得過期的快取快照（`model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/UserAdapter.java:349-361`、`model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/entities/CachedUser.java:80,156-159`）；`false` 時驗證與寫入共用同一個 JPA persistence context，`CredentialModel` 不攜帶 version（`server-spi/src/main/java/org/keycloak/credential/CredentialModel.java:60-71`），但 `updateCredential` 的 `em.find` 會取得 managed entity，`@Version` 衝突時交易中止、該次驗證失敗（`model/jpa/src/main/java/org/keycloak/models/jpa/JpaUserCredentialStore.java:63-76`、`model/jpa/src/main/java/org/keycloak/models/jpa/entities/CredentialEntity.java:77-79`）。\n- **OUT-5（confirmed）** 不驗證快取複寫／失效協定與多節點時序；模型只抽象「快照可能過期」與「交易可能中止」兩種結果。"
+        },
+        {
+          "id": "c",
+          "recommended": false,
+          "label": "只建模無快取組態：驗證與寫入共用 JPA persistence context，樂觀鎖衝突視為交易中止（依推論應無反例）",
+          "rules": "- **ENV-6（assumption；預設採用，G1 可推翻）** 本次只建模停用使用者快取的組態：驗證與寫入在同一個 JPA persistence context，`updateCredential` 的 `em.find` 與驗證讀取取得同一個 managed entity，`@Version` 衝突時交易中止（`model/jpa/src/main/java/org/keycloak/models/jpa/JpaUserCredentialStore.java:63-76`、`model/jpa/src/main/java/org/keycloak/models/jpa/entities/CredentialEntity.java:77-79`）。模型應驗證 INV-1～INV-3 成立；若出現反例，表示我們對樂觀鎖的推論有誤，需回頭修正 ENV。\n- **OUT-5（confirmed）** 不驗證預設使用者快取啟用的組態；此組態與 CVE 描述的預設部署不同，若要做請選 b。"
+        }
+      ]
+    }
+  ]
+}
