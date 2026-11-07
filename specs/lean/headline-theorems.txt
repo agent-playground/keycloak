@@ -1,0 +1,4 @@
+# One fully-qualified headline theorem name per line (statements phase).
+Hotp.inv1_same_matched_counter_accepted_twice
+Hotp.inv2_counter_not_ahead_of_all_matches
+Hotp.inv3_counter_can_decrease
