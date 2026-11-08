@@ -1,0 +1,25 @@
+tests/base/src/test/java/org/keycloak/tests/login/HotpConcurrentLoginTest.java
+  s_f03beedd2bee7c::t_4e731cd8f69086 132
+  s_f03beedd2bee7c::t_aa16a78b4b083b 142-145,147-148,150,152-164,172
+  s_f03beedd2bee7c::t_f4dc2bd88b9c1b 55
+  s_f03beedd2bee7c::t_35923ea4fbce17 1-54,56-107,113-114,116-118,120-131,133-141,146,149,151,165-171,173-192
+  s_f03beedd2bee7c::t_94b08241c8e323 108-112,115,119
+testsuite/model/src/test/java/org/keycloak/testsuite/model/user/HotpConcurrentValidationModelTest.java
+  s_f03beedd2bee7c::t_ba9f54e5f6be48 1-448
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e224b9736de8d268d39ae3b4a2932dfcb92210ae",
+  "prompts": {},
+  "sessions": {
+    "s_f03beedd2bee7c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a698ef6e-8119-4b66-ab31-9606ab4c3273",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "philipz <philipzheng@gmail.com>"
+    }
+  }
+}
