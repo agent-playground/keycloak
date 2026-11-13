@@ -1,0 +1,41 @@
+# Backstage catalog entry + Software Factory 納管宣告（software_factory docs/03 §2.2、docs/27）。
+#
+# factory.io/* 三軸是監督評分（docs/06 §3）的輸入，由人類宣告並受 H5 硬規則保護：
+# 若 agent 能調降自己的風險評級，整個監督模型即失效。agent 不得修改此檔。
+#
+# 評分：business-criticality 0 + risk-profile 2 + complexity 2 = 4 → review tier
+# （0–1 on-loop、2–4 review、5–6 in-loop；in-loop 會擋下大多數 task 類型）。
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: keycloak
+  description: Keycloak IAM server (agent-playground fork, Software Factory 實驗用)
+  annotations:
+    github.com/project-slug: agent-playground/keycloak
+
+    # --- Factory oversight axes (docs/06 §3) ---
+    # tactical：此 repo 為 agent-playground 下的 fork，屬實驗性專案，故障不影響外部使用者
+    # （docs/06 §3.1 對 tactical 的定義）。不更高：無正式部署、無對外使用者；
+    # 不更低：已是最低等級。若日後此 fork 用於實際部署，須調升並重新評估 tier。
+    factory.io/business-criticality: tactical
+    # high：Keycloak 是 IAM 伺服器，核心為認證、授權、token 簽發、憑證與金鑰管理，
+    # 錯誤即為安全漏洞（例：CVE-2026-118030 HOTP 驗證競態）。不更低：多數業務邏輯直接觸及安全邊界。
+    factory.io/risk-profile: high
+    # high：13k+ 檔、數十個 Maven 模組 + Quarkus 發行版 + pnpm JS workspace（admin/account UI）、
+    # 多資料庫 Liquibase 遷移、Infinispan 叢集、FIPS 加密 provider。不更低：跨模組 SPI 耦合高，
+    # 單一改動常需理解 server-spi → services → model 多層。
+    factory.io/complexity: high
+
+    # 禁止工廠自動 merge（onboarding 模板對新納管 repo 的要求）。
+    factory.io/agent-automerge: "false"
+
+    # --- 技術棧規範（人類登錄，agent 不得修改）---
+    # 主體為 Maven + Quarkus + JUnit 5；JS（js/，pnpm + vitest/playwright）以 risk-paths 控管。
+    factory.io/stack: java-quarkus
+    factory.io/test-framework: junit
+    # 形式化規格根目錄：specs/quint（Quint）與 specs/lean（Lean）。
+    factory.io/quint-spec: specs/
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/agent-playground

@@ -1,0 +1,72 @@
+# Software Factory 硬規則（docs/06 §5；H1–H7）。
+#
+# 改動命中任一 glob → 風險軸強制為 high，且 judge 停止規則（SR2/SR3）將結果設為 needs-human。
+# 由人類維護並受 H5 保護；agent 不得修改此檔。
+#
+# Glob 語意：minimatch(path, glob, { dot: true })，區分大小寫、以 repo 根目錄為錨點、無 matchBase。
+# 刻意只框 production 原始碼（src/main），不含 tests/、testsuite/、src/test/，讓工廠可自主補測試。
+# 命中數以 `git ls-files`（software-factory 分支，13613 檔）驗證。
+# 空規則一律寫成 `[]`；只留 key 不給值會被解析為 null 而使整個檔案驗證失敗。
+hard_rules:
+  # H1 — 認證/授權、權限檢查、session 管理
+  H1:
+    - "services/src/main/java/org/keycloak/authentication/**"                 # 174: authenticators/directgrant/ValidateOTP.java, authenticators/browser/OTPFormAuthenticator.java, AuthenticationProcessor.java
+    - "services/src/main/java/org/keycloak/services/managers/**"              # 21: AuthenticationManager.java, UserSessionManager.java, DefaultBruteForceProtector.java
+    - "services/src/main/java/org/keycloak/services/resources/admin/fgap/**"  # 33: AdminPermissionEvaluator.java, MgmtPermissionsV2.java, UserPermissionsV2.java
+    - "services/src/main/java/org/keycloak/services/resources/admin/{AdminAuth,AdminRoot}.java"  # 2: admin bearer-token 認證入口
+    - "{services,server-spi-private}/src/main/java/org/keycloak/authorization/**"  # 103: server-spi-private/.../AuthorizationProvider.java, services/.../authorization/util/Tokens.java
+    - "services/src/main/java/org/keycloak/protocol/oidc/{TokenManager,AccessTokenIntrospectionProvider,RefreshTokenIntrospectionProvider}.java"  # 3: token 簽發/introspection
+    - "core/src/main/java/org/keycloak/TokenVerifier.java"                    # 1: JWT 驗證
+    - "server-spi/src/main/java/org/keycloak/{sessions/**,models/UserSession*.java}"  # 7: sessions/AuthenticationSessionModel.java, models/UserSessionModel.java
+
+  # H2 — 金流計算：Keycloak 無相關程式（檔名與 .java/.ts/.tsx 內容掃描皆 0 命中），待人類確認
+  H2: []
+
+  # H3 — 敏感資料：憑證、金鑰、加密、secret
+  H3:
+    - "{services,server-spi,server-spi-private}/src/main/java/org/keycloak/credential/**"  # 37: OTPCredentialProvider.java, PasswordCredentialProvider.java, Pbkdf2PasswordHashProvider.java
+    - "{services,server-spi,server-spi-private}/src/main/java/org/keycloak/keys/**"        # 47: keys/DefaultKeyManager.java, keys/KeyProvider.java
+    - "{services,server-spi,quarkus/runtime}/src/main/java/**/vault/**"                    # 22: vault/AbstractVaultProviderFactory.java, quarkus/.../vault/FilesKeystoreVaultProviderFactory.java
+    - "{core,services,server-spi-private}/src/main/java/org/keycloak/crypto/**"            # 103: core/.../crypto/Algorithm.java, services/.../crypto/AesGcmContentEncryptionProvider.java
+    - "common/src/main/java/org/keycloak/common/crypto/**"                                 # 9: CryptoIntegration.java, CertificateUtilsProvider.java
+    - "crypto/*/src/main/**"                                                               # 39: crypto/default、crypto/elytron、crypto/fips1402 providers
+    - "core/src/main/java/org/keycloak/jose/**"                                            # 42: JWS/JWE/JWK（jose/jws/crypto/SignatureProvider.java）
+    - "{server-spi,server-spi-private}/src/main/java/org/keycloak/models/utils/{HmacOTP,TimeBasedOTP,CredentialValidation}.java"  # 3: OTP 產生/驗證
+    - "model/jpa/src/main/java/org/keycloak/models/jpa/{JpaUserCredentialStore*,entities/CredentialEntity}.java"  # 3: 憑證持久化
+
+  # H4 — 共用模組介面：SPI、核心 model
+  H4:
+    - "server-spi/src/main/**"                                                 # 229: models/UserModel.java, component/ComponentFactory.java
+    - "server-spi-private/src/main/java/org/keycloak/{models,provider}/**"     # 134: models/utils/RepresentationToModel.java, provider/ServerInfoAwareProviderFactory.java
+    - "model/storage/src/main/**"                                              # 40: credential/UserCredentialManager.java
+    - "{services,server-spi*,core,common,saml-core*,model/*,federation/*,crypto/*,authz/**,authzen/services,ssf/*,scim/*,quarkus/runtime,rest/**,integration/*}/src/main/resources/META-INF/services/org.keycloak.provider.Spi"  # 11: SPI 註冊清單
+
+  # H5 — 防護欄本身（模板必填四項 + agent 會讀取的指令檔）
+  H5:
+    - ".github/**"          # 104: workflows、.github/CODEOWNERS、本檔
+    - "CODEOWNERS"          # 0: 模板必填；Keycloak 的 CODEOWNERS 位於 .github/
+    - "**/CODEOWNERS"       # 1: .github/CODEOWNERS
+    - "catalog-info.yaml"   # 1: 根目錄 catalog（含三軸）
+    - ".dsh/skills/**"      # 0: 目前無
+    - "AGENTS.md"           # 1: DSH 會載入的 agent 指令
+    - "**/CLAUDE.md"        # 0: 目前無
+    - ".claude/**"          # 1: .claude/skills（symlink -> ../skills）
+    - "skills/**"           # 2: skills/kc-translation-review/SKILL.md, skills/kc-update-release-notes/SKILL.md
+
+  # H6 — 不可逆的 schema / 資料遷移
+  H6:
+    - "model/jpa/src/main/resources/META-INF/jpa-changelog-*.xml"              # 80: jpa-changelog-master.xml, jpa-changelog-22.0.0.xml
+    - "model/jpa/src/main/java/org/keycloak/connections/jpa/updater/liquibase/**"  # 65: custom/JpaUpdate25_0_0_ConsentConstraints.java, lock/**
+    - "model/storage-private/src/main/java/org/keycloak/migration/**"          # 51: MigrationModelManager.java, migrators/MigrateTo26_4_3.java
+    - "model/jpa/src/main/java/**/entities/**"                                 # 55: UserEntity.java, CredentialEntity.java（改 entity 幾乎必伴隨 schema 變更）
+    - "model/infinispan/src/main/java/org/keycloak/marshalling/**"             # 3: KeycloakModelSchema.java（protostream schema，影響滾動升級相容性）
+
+  # H7 — 對外 API 契約的破壞性變更
+  H7:
+    - "services/src/main/java/org/keycloak/services/resources/**"              # 112: admin REST v1（admin/**）、Account REST API（account/**）
+    - "rest/admin-v2/api/src/main/**"                                          # 24: admin/api/AdminApi.java, representations/admin/v2/**
+    - "core/src/main/java/org/keycloak/representations/**"                     # 194: AccessToken.java, idm/*Representation.java
+    - "js/libs/keycloak-admin-client/{openapi.json,src/**}"                    # 112: openapi.json, src/defs/*.ts
+    - "integration/*/src/main/**"                                              # 112: 對外發佈的 Java admin client、kcadm、client registration
+    - "services/src/main/java/org/keycloak/protocol/oidc/endpoints/**"         # 19: TokenEndpoint.java, AuthorizationEndpoint.java, LogoutEndpoint.java
+    - "services/src/main/java/org/keycloak/protocol/{oidc/OIDCWellKnownProvider,oidc/OIDCLoginProtocolService,saml/SamlService}.java"  # 3: discovery 與協定入口
