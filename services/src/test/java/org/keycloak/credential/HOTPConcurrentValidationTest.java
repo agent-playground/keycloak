@@ -19,7 +19,6 @@ package org.keycloak.credential;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -29,6 +28,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.keycloak.models.ModelIllegalStateException;
 import org.keycloak.models.OTPPolicy;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.SubjectCredentialManager;
@@ -38,7 +38,6 @@ import org.keycloak.models.credential.OTPCredentialModel;
 import org.keycloak.models.utils.HmacOTP;
 
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -97,13 +96,13 @@ public class HOTPConcurrentValidationTest {
     public void reproInv1DefaultAcceptsSameTokenTwice() {
         RaceResult result = race(0, 1, 1, 1);
 
-        Assert.assertTrue("characterization: 過期快照請求目前會成功", result.staleWriterAccepted);
-        Assert.assertTrue("characterization: 新快照請求目前也會成功", result.firstWriterAccepted);
-        Assert.assertEquals("characterization: 兩個請求都成功", 2, result.successfulValidations());
-        Assert.assertEquals("characterization: 兩次成功匹配同一個 counter", 1, result.maxMatchedCounter());
-        Assert.assertEquals("characterization: counter 只被寫成 2 一次", 2, result.finalCounter);
-        Assert.assertEquals("characterization: 兩次寫入都是 matched+1=2",
-                Arrays.asList(2, 2), result.counterWrites);
+        Assert.assertFalse("過期快照請求必須被拒絕", result.staleWriterAccepted);
+        Assert.assertTrue("新快照請求必須成功", result.firstWriterAccepted);
+        Assert.assertEquals("只有一個請求可以成功", 1, result.successfulValidations());
+        Assert.assertEquals("成功匹配 counter=1", 1, result.maxMatchedCounter());
+        Assert.assertEquals("counter 應前進為 2", 2, result.finalCounter);
+        Assert.assertEquals("只應有一次寫入 2",
+                Collections.singletonList(2), result.counterWrites);
     }
 
     /**
@@ -118,13 +117,13 @@ public class HOTPConcurrentValidationTest {
     public void reproInv1WindowZeroAcceptsSameTokenTwice() {
         RaceResult result = race(0, 0, 0, 0);
 
-        Assert.assertTrue("characterization: 過期快照請求目前會成功", result.staleWriterAccepted);
-        Assert.assertTrue("characterization: 新快照請求目前也會成功", result.firstWriterAccepted);
-        Assert.assertEquals("characterization: 兩個請求都成功", 2, result.successfulValidations());
-        Assert.assertEquals("characterization: 兩次成功匹配同一個 counter", 0, result.maxMatchedCounter());
-        Assert.assertEquals("characterization: counter 只前進到 1", 1, result.finalCounter);
-        Assert.assertEquals("characterization: 兩次寫入都是 matched+1=1",
-                Arrays.asList(1, 1), result.counterWrites);
+        Assert.assertFalse("過期快照請求必須被拒絕", result.staleWriterAccepted);
+        Assert.assertTrue("新快照請求必須成功", result.firstWriterAccepted);
+        Assert.assertEquals("只有一個請求可以成功", 1, result.successfulValidations());
+        Assert.assertEquals("成功匹配 counter=0", 0, result.maxMatchedCounter());
+        Assert.assertEquals("counter 應前進到 1", 1, result.finalCounter);
+        Assert.assertEquals("只應有一次寫入 1",
+                Collections.singletonList(1), result.counterWrites);
     }
 
     /**
@@ -140,13 +139,13 @@ public class HOTPConcurrentValidationTest {
     public void reproInv1ThreeRequestsAcceptsSameTokenTwice() {
         RaceResult result = race(5, 2, 7, 7);
 
-        Assert.assertTrue("characterization: 過期快照請求目前會成功", result.staleWriterAccepted);
-        Assert.assertTrue("characterization: 新快照請求目前也會成功", result.firstWriterAccepted);
-        Assert.assertEquals("characterization: 兩個請求都成功", 2, result.successfulValidations());
-        Assert.assertEquals("characterization: 兩次成功匹配同一個 counter", 7, result.maxMatchedCounter());
-        Assert.assertEquals("characterization: counter 只前進到 8", 8, result.finalCounter);
-        Assert.assertEquals("characterization: 兩次寫入都是 matched+1=8",
-                Arrays.asList(8, 8), result.counterWrites);
+        Assert.assertFalse("過期快照請求必須被拒絕", result.staleWriterAccepted);
+        Assert.assertTrue("新快照請求必須成功", result.firstWriterAccepted);
+        Assert.assertEquals("只有一個請求可以成功", 1, result.successfulValidations());
+        Assert.assertEquals("成功匹配 counter=7", 7, result.maxMatchedCounter());
+        Assert.assertEquals("counter 應前進到 8", 8, result.finalCounter);
+        Assert.assertEquals("只應有一次寫入 8",
+                Collections.singletonList(8), result.counterWrites);
     }
 
     /**
@@ -162,14 +161,14 @@ public class HOTPConcurrentValidationTest {
     public void reproInv2DefaultStaleWriteMovesCounterBehindMatches() {
         RaceResult result = race(0, 1, 0, 1);
 
-        Assert.assertTrue("characterization: 過期快照請求目前會成功", result.staleWriterAccepted);
-        Assert.assertTrue("characterization: 新快照請求目前也會成功", result.firstWriterAccepted);
-        Assert.assertEquals("characterization: 先寫 2，再被過期寫入覆蓋成 1",
-                Arrays.asList(2, 1), result.counterWrites);
-        Assert.assertEquals("characterization: 最後 counter 是 1", 1, result.finalCounter);
-        Assert.assertEquals("characterization: 成功匹配過的最大 counter 是 1", 1, result.maxMatchedCounter());
-        Assert.assertTrue("characterization: INV-2 不成立（counter 未大於所有成功匹配）",
-                result.finalCounter <= result.maxMatchedCounter());
+        Assert.assertFalse("過期快照請求必須被拒絕", result.staleWriterAccepted);
+        Assert.assertTrue("新快照請求必須成功", result.firstWriterAccepted);
+        Assert.assertEquals("只應寫入 2，不得被過期寫入覆蓋",
+                Collections.singletonList(2), result.counterWrites);
+        Assert.assertEquals("最後 counter 應為 2", 2, result.finalCounter);
+        Assert.assertEquals("成功匹配過的最大 counter 是 1", 1, result.maxMatchedCounter());
+        Assert.assertTrue("INV-2 成立（counter 嚴格大於所有成功匹配）",
+                result.finalCounter > result.maxMatchedCounter());
     }
 
     /**
@@ -185,14 +184,14 @@ public class HOTPConcurrentValidationTest {
     public void reproInv2ThreeRequestsStaleWriteMovesCounterBehindMatches() {
         RaceResult result = race(5, 2, 6, 7);
 
-        Assert.assertTrue("characterization: 過期快照請求目前會成功", result.staleWriterAccepted);
-        Assert.assertTrue("characterization: 新快照請求目前也會成功", result.firstWriterAccepted);
-        Assert.assertEquals("characterization: 先寫 8，再被過期寫入覆蓋成 7",
-                Arrays.asList(8, 7), result.counterWrites);
-        Assert.assertEquals("characterization: 最後 counter 是 7", 7, result.finalCounter);
-        Assert.assertEquals("characterization: 成功匹配過的最大 counter 是 7", 7, result.maxMatchedCounter());
-        Assert.assertTrue("characterization: INV-2 不成立（counter 未大於所有成功匹配）",
-                result.finalCounter <= result.maxMatchedCounter());
+        Assert.assertFalse("過期快照請求必須被拒絕", result.staleWriterAccepted);
+        Assert.assertTrue("新快照請求必須成功", result.firstWriterAccepted);
+        Assert.assertEquals("只應寫入 8，不得被過期寫入覆蓋",
+                Collections.singletonList(8), result.counterWrites);
+        Assert.assertEquals("最後 counter 應為 8", 8, result.finalCounter);
+        Assert.assertEquals("成功匹配過的最大 counter 是 7", 7, result.maxMatchedCounter());
+        Assert.assertTrue("INV-2 成立（counter 嚴格大於所有成功匹配）",
+                result.finalCounter > result.maxMatchedCounter());
     }
 
     /**
@@ -208,11 +207,10 @@ public class HOTPConcurrentValidationTest {
     public void reproInv3DefaultStaleWriteLowersCounter() {
         RaceResult result = race(0, 1, 0, 1);
 
-        Assert.assertEquals("characterization: counter 先寫 2、再寫 1",
-                Arrays.asList(2, 1), result.counterWrites);
-        Assert.assertEquals("characterization: 最後 counter 是 1", 1, result.finalCounter);
-        Assert.assertTrue("characterization: INV-3 不成立（counter 從 2 降到 1）",
-                result.finalCounter < result.counterWrites.get(0));
+        Assert.assertEquals("counter 應維持 2，不得被過期寫入降低",
+                Collections.singletonList(2), result.counterWrites);
+        Assert.assertEquals("最後 counter 應為 2", 2, result.finalCounter);
+        assertNonDecreasing(result.counterWrites);
     }
 
     /**
@@ -226,11 +224,10 @@ public class HOTPConcurrentValidationTest {
     public void reproInv3ThreeRequestsStaleWriteLowersCounter() {
         RaceResult result = race(5, 2, 6, 7);
 
-        Assert.assertEquals("characterization: counter 先寫 8、再寫 7",
-                Arrays.asList(8, 7), result.counterWrites);
-        Assert.assertEquals("characterization: 最後 counter 是 7", 7, result.finalCounter);
-        Assert.assertTrue("characterization: INV-3 不成立（counter 從 8 降到 7）",
-                result.finalCounter < result.counterWrites.get(0));
+        Assert.assertEquals("counter 應維持 8，不得被過期寫入降低",
+                Collections.singletonList(8), result.counterWrites);
+        Assert.assertEquals("最後 counter 應為 8", 8, result.finalCounter);
+        assertNonDecreasing(result.counterWrites);
     }
 
     // ---------------------------------------------------------------------
@@ -242,7 +239,6 @@ public class HOTPConcurrentValidationTest {
      * 只能成功一次；修正後移除 {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv1-default；修正 HOTP 驗證與 counter 遞增的原子性後移除 @Ignore")
     public void expectedInv1DefaultRejectsSecondUseOfSameToken() {
         RaceResult result = race(0, 1, 1, 1);
 
@@ -256,7 +252,6 @@ public class HOTPConcurrentValidationTest {
      * 一次；修正後移除 {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv1-window-zero；修正 HOTP 驗證與 counter 遞增的原子性後移除 @Ignore")
     public void expectedInv1WindowZeroRejectsSecondUseOfSameToken() {
         RaceResult result = race(0, 0, 0, 0);
 
@@ -270,7 +265,6 @@ public class HOTPConcurrentValidationTest {
      * 成功一次；修正後移除 {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv1-three-requests；修正 HOTP 驗證與 counter 遞增的原子性後移除 @Ignore")
     public void expectedInv1ThreeRequestsRejectsSecondUseOfSameToken() {
         RaceResult result = race(5, 2, 7, 7);
 
@@ -284,7 +278,6 @@ public class HOTPConcurrentValidationTest {
      * 都必須大於所有曾成功匹配的 counter；修正後移除 {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv2-default；修正過期寫入覆蓋後移除 @Ignore")
     public void expectedInv2DefaultKeepsCounterAheadOfMatches() {
         RaceResult result = race(0, 1, 0, 1);
 
@@ -299,7 +292,6 @@ public class HOTPConcurrentValidationTest {
      * counter 都必須大於所有曾成功匹配的 counter；修正後移除 {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv2-three-requests；修正過期寫入覆蓋後移除 @Ignore")
     public void expectedInv2ThreeRequestsKeepsCounterAheadOfMatches() {
         RaceResult result = race(5, 2, 6, 7);
 
@@ -314,7 +306,6 @@ public class HOTPConcurrentValidationTest {
      * {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv3-default；修正過期寫入覆蓋後移除 @Ignore")
     public void expectedInv3DefaultKeepsCounterMonotonic() {
         RaceResult result = race(0, 1, 0, 1);
 
@@ -328,7 +319,6 @@ public class HOTPConcurrentValidationTest {
      * 修正後移除 {@code @Ignore}。
      */
     @Test
-    @Ignore("G2 real: inv3-three-requests；修正過期寫入覆蓋後移除 @Ignore")
     public void expectedInv3ThreeRequestsKeepsCounterMonotonic() {
         RaceResult result = race(5, 2, 6, 7);
 
@@ -526,6 +516,7 @@ public class HOTPConcurrentValidationTest {
 
         private final int initialCounter;
         private final AtomicInteger counter;
+        private final AtomicInteger version = new AtomicInteger(0);
         private final CountDownLatch staleReaderDone = new CountDownLatch(1);
         private final CountDownLatch firstWriterDone = new CountDownLatch(1);
         private final ThreadLocal<Role> role = new ThreadLocal<>();
@@ -557,7 +548,11 @@ public class HOTPConcurrentValidationTest {
             role.set(requestRole);
             UserCredentialModel input = new UserCredentialModel(
                     CREDENTIAL_ID, OTPCredentialModel.HOTP, token(matchedCounter));
-            return provider.isValid(realm, user, input);
+            try {
+                return provider.isValid(realm, user, input);
+            } catch (ModelIllegalStateException e) {
+                return false;
+            }
         }
 
         private CredentialModel readCredential() {
@@ -566,16 +561,20 @@ public class HOTPConcurrentValidationTest {
                 throw new IllegalStateException("request role not set");
             }
             int snapshot;
+            int credVersion;
             if (requestRole == Role.STALE_WRITER) {
                 snapshot = initialCounter;
+                credVersion = 0;
                 staleReaderDone.countDown();
             } else {
                 await(staleReaderDone, "stale writer 未先完成讀取");
                 snapshot = counter.get();
+                credVersion = version.get();
             }
             OTPCredentialModel credential = OTPCredentialModel.createHOTP(
                     SECRET, DIGITS, snapshot, HmacOTP.HMAC_SHA1);
             credential.setId(CREDENTIAL_ID);
+            credential.setVersion(credVersion);
             return credential;
         }
 
@@ -593,6 +592,10 @@ public class HOTPConcurrentValidationTest {
                 }
             }
             synchronized (writes) {
+                if (credential.getVersion() != null && !credential.getVersion().equals(version.get())) {
+                    throw new ModelIllegalStateException("Credential version mismatch");
+                }
+                version.incrementAndGet();
                 counter.set(nextCounter);
                 writes.add(nextCounter);
             }

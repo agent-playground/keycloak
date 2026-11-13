@@ -71,6 +71,8 @@ public class CredentialModel implements Serializable {
 
     private String federationLink;
 
+    private Integer version;
+
     public CredentialModel shallowClone() {
         CredentialModel res = new CredentialModel();
         res.id = id;
@@ -80,6 +82,7 @@ public class CredentialModel implements Serializable {
         res.secretData = secretData;
         res.credentialData = credentialData;
         res.federationLink = federationLink;
+        res.version = version;
         return res;
     }
 
@@ -302,6 +305,16 @@ public class CredentialModel implements Serializable {
 
     public String getFederationLink() {
         return federationLink;
+    }
+
+    @JsonIgnore
+    public Integer getVersion() {
+        return version;
+    }
+
+    @JsonIgnore
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     private Map<String, Object> readMapFromJson(boolean secret) {

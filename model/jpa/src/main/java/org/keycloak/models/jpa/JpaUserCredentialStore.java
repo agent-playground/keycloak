@@ -24,12 +24,14 @@ import java.util.stream.Stream;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.TypedQuery;
 
 import org.keycloak.credential.CredentialModel;
 import org.keycloak.credential.UserCredentialStore;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ModelDuplicateException;
+import org.keycloak.models.ModelIllegalStateException;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.jpa.entities.CredentialEntity;
@@ -63,6 +65,10 @@ public class JpaUserCredentialStore implements UserCredentialStore {
     public void updateCredential(RealmModel realm, UserModel user, CredentialModel cred) {
         CredentialEntity entity = em.find(CredentialEntity.class, cred.getId());
         if (!checkCredentialEntity(entity, user)) return;
+        if (cred.getVersion() != null && !cred.getVersion().equals(entity.getVersion())) {
+            throw new ModelIllegalStateException("Credential was concurrently modified",
+                    new OptimisticLockException(entity));
+        }
         if (!Objects.equals(cred.getUserLabel(), entity.getUserLabel())) {
             // For legacy entries in the credentials, there might be a duplicate for historical reasons.
             // Ignore them when the credential is updated, which might happen when credentials are verified.
@@ -112,6 +118,7 @@ public class JpaUserCredentialStore implements UserCredentialStore {
 
         model.setSecretData(entity.getSecretData());
         model.setCredentialData(entity.getCredentialData());
+        model.setVersion(entity.getVersion());
         return model;
     }
 

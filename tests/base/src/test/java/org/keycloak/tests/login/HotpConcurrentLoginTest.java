@@ -53,14 +53,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * CVE-2026-118030（https://github.com/keycloak/keycloak/issues/54414）的端到端重現：對完整伺服器
  * 以同一個 HOTP code 並行送出 direct grant，檢查是否核發多個 session 的 token。
  *
- * <p>這是不控制交錯的黑箱測試，結果取決於實際排程，因此每輪換新 code 並跑多輪。目前行為是弱點的
- * characterization：至少一輪出現重複成功。修補後應改為斷言每輪只有一個請求成功。</p>
+ * <p>這是不控制交錯的黑箱測試，結果取決於實際排程，因此每輪換新 code 並跑多輪，驗證修補後
+ * 每輪只能有一個請求成功，不可對同一個 code 核發多個 session。</p>
  */
 @KeycloakIntegrationTest
 public class HotpConcurrentLoginTest {
@@ -128,7 +127,7 @@ public class HotpConcurrentLoginTest {
                         sessions.add(body.get("session_state").asText());
                     }
                 }
-                assertTrue(!sessions.isEmpty(), "每輪的有效 code 至少要成功一次，否則 counter 已與預期不同步：" + statuses);
+                assertEquals(1, sessions.size(), "每輪的有效 code 只能成功一次：" + statuses);
                 distinctSessions += sessions.size();
                 if (sessions.size() > 1) {
                     roundsWithReuse++;
@@ -148,7 +147,7 @@ public class HotpConcurrentLoginTest {
                 + ", serverSessions=" + serverSessions + ", statuses=" + statuses;
         System.out.println("HOTP-RACE-RESULT " + summary);
         assertEquals(distinctSessions, serverSessions, "回應中的 session 必須都真實存在於伺服器：" + summary);
-        assertTrue(roundsWithReuse > 0, "characterization：同一個 code 應至少一次核發多個 session；" + summary);
+        assertEquals(0, roundsWithReuse, "同一個 code 不得核發多個 session；" + summary);
     }
 
     private static HttpResponse<String> send(HttpClient http, URI tokenEndpoint, String code) throws Exception {

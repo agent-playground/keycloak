@@ -64,8 +64,8 @@ import org.junit.Test;
  * 測試只替換 {@code credentialManager()} 的外層，以便在「讀取 snapshot」與「寫回 counter」之間
  * 暫停；被包裝的快取與儲存邏輯都不變。</p>
  *
- * <p>{@code repro*} 是 characterization test，斷言目前有弱點的行為。修補後這些測試應該失敗，
- * 屆時改為斷言「同一個 code 只能成功一次」。</p>
+ * <p>此測試驗證修復後的行為：即使讀取自快取的過期 snapshot，寫入端透過 {@link CredentialModel#getVersion()}
+ * 攔截過期寫入，確保同一個 code 只能成功一次且 counter 不會倒退。</p>
  *
  * <p>執行方式：
  * {@code ./mvnw -pl testsuite/model test -Pjpa+infinispan -Dtest=HotpConcurrentValidationModelTest}。
@@ -154,9 +154,9 @@ public class HotpConcurrentValidationModelTest extends KeycloakModelTest {
 
         Assert.assertTrue("B 必須走快取路徑：" + stale, stale.servedFromCache);
         Assert.assertEquals("B 必須持有舊 snapshot：" + stale, 0, stale.snapshot);
-        Assert.assertTrue("characterization：A 成功 " + a, a.accepted());
-        Assert.assertTrue("characterization：B 也以同一個 code 成功 " + stale, stale.accepted());
-        Assert.assertEquals("兩次成功，counter 只前進一次", 2, persistedCounter());
+        Assert.assertTrue("A 必須成功：" + a, a.accepted());
+        Assert.assertFalse("B 的過期寫入必須被拒絕：" + stale, stale.accepted());
+        Assert.assertEquals("只有一次成功，counter 只前進到 2", 2, persistedCounter());
     }
 
     /**
@@ -195,8 +195,8 @@ public class HotpConcurrentValidationModelTest extends KeycloakModelTest {
         Assert.assertEquals("B 開始前，A 必須已寫入資料庫", 2, counterDuringWindow);
         Assert.assertTrue("B 必須走快取路徑：" + stale, stale.servedFromCache);
         Assert.assertEquals("資料庫已是 2，B 仍讀到快取裡的 0：" + stale, 0, stale.snapshot);
-        Assert.assertTrue("characterization：A 成功 " + first, first.accepted());
-        Assert.assertTrue("characterization：B 也以同一個 code 成功 " + stale, stale.accepted());
+        Assert.assertTrue("A 必須成功：" + first, first.accepted());
+        Assert.assertFalse("B 的過期寫入必須被拒絕：" + stale, stale.accepted());
         Assert.assertEquals(2, persistedCounter());
     }
 
@@ -289,10 +289,10 @@ public class HotpConcurrentValidationModelTest extends KeycloakModelTest {
         Attempt replay = validate(1, Hooks.none());
 
         Assert.assertTrue(a.toString(), a.accepted());
-        Assert.assertTrue(stale.toString(), stale.accepted());
+        Assert.assertFalse("B 的過期寫入必須被拒絕：" + stale, stale.accepted());
         Assert.assertEquals(2, counterAfterA);
-        Assert.assertEquals("characterization：counter 倒退", 1, counterAfterStale);
-        Assert.assertTrue("characterization：用過的 code 可重放 " + replay, replay.accepted());
+        Assert.assertEquals("counter 不得倒退", 2, counterAfterStale);
+        Assert.assertFalse("用過的 code 不得重放：" + replay, replay.accepted());
     }
 
     private void assumeUserCacheEnabled() {
